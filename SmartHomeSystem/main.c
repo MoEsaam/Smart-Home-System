@@ -3,7 +3,7 @@
 /********************************** Authors:	  Youssef Mohammed AbdelFattah Ahmed ******************************/
 /********************************** 		 	  Mohammed Essam Fawzy	 	  	     ******************************/
 /**********************************		 	  	  Fathy Gamal Eldein Fathy Elsaid    ******************************/
-/********************************** 		 	  Menna Allah khalil İbrahim mezar   ******************************/
+/********************************** 		 	  Menna Allah Khalil Ibrahim Mezar   ******************************/
 /********************************** 		 	  Menna Allah Yasser Ahmed		     ******************************/
 /**********************************												 	 ******************************/
 /********************************** Component: 	  SMART HOME SYSTEM			         ******************************/
@@ -60,6 +60,9 @@ static u8 TEMPERATURE_u8Flag4 = 0;
 /* STATIC GLOBAL VARIABLE TO ALLOW WRITE THE STRING "EMERGENCY LED ON" ONLY ONE TIME IN THE RANGE OF TEMPERATURE VALUE > 45 */
 static u8 TEMPERATURE_u8Flag5 = 0;
 
+/* STATIC LOCAL VARIABLE TO UPDATE (WHEN SET TO 1) THE STATE OF MOTOR AND TEMPERATURE SENSOR EMERGENCY LED AT ANY TIME WHILE SYSTEM RUNNING WITHOUT PRINT ON LCD */
+static u8 REALTIME_u8TemperatureFlag;
+
 /* STATIC GLOBAL VARIABLE TO CARRY NEW READED LDR DIGITAL VALUE FROM ADC */
 static u16 LDR_u16DigitalVoltage = 0;
 
@@ -80,6 +83,9 @@ static u8 LDR_u8Flag3 = 0;
 
 /* STATIC GLOBAL VARIABLE TO ALLOW WRITE THE STRING "HIGH LIGHT" AND THE STRING "volt =" ONLY ONE TIME AND CHANGE THEIR VALUES ONLY WHEN BE ALREADY IN THEIR RANGE */
 static u8 LDR_u8Flag4 = 0;
+
+/* STATIC LOCAL VARIABLE TO UPDATE (WHEN SET TO 1) THE STATE OF LIGHT SYSTEM AT ANY TIME WHILE SYSTEM RUNNING WITHOUT PRINT ON LCD */
+static u8 REALTIME_u8LightSystemFlag;
 
 /* GLOBAL VARIABLE MUST BE SET WITH CHANNEL NUMBER BEFORE ENTER ADC_FUNC (CALL BACK FUNCTION) OF ADC TO DISTINGUISH BETWEEN LDR AND TEMPERATURE SENSOR */
 u8 ADC_u8ChannelSelected;
@@ -201,6 +207,7 @@ int main(void){
 
 	/* STATIC LOCAL VARIABLE TO ALLOW WRITE THE INFORMATION OF TIME AND DATE ONLY ONE TIME WHEN GLOBAL CONTROL = 9 (RTC AREA) */
 	static u8 RTC_u8Flag = 0;
+
 	/* DEFINE A VARIABLE FROM THE TYPE OF E_RTC STRUCT TO HOLD THE VALUES OF DATE AND TIME */
 	E_RTC rtc;
 
@@ -268,6 +275,7 @@ int main(void){
 		/* UPDATE THE STATUS OF GAS SENSOR ALL OF THE TIME IF END_u8Flag VARIABLE IS SET TO ONE */
 		if(END_u8Flag == 1){
 
+			/***************************************** GAS SENSOR UPDATE VALUE *****************************************/
 			/* CHECK IF GAS SENSOR DETECT ANY TYPE OF GAS IN THE ATMOSPHERE */
 			if(DIO_u8GetPinValue(PORTA, PIN1) == 1){
 				/* TURN-ON GAS EMERGENCY LED ON PORTA PIN6 */
@@ -278,6 +286,68 @@ int main(void){
 				/* TURN-OFF GAS EMERGENCY LED ON PORTA PIN6 */
 				DIO_voidSetPinValue(PORTA, PIN6, LOW);
 			}
+			/*===========================================================================================================*/
+
+			/************************************** TEMPERATURE SENSOR UPDATE VALUE **************************************/
+			if(DIO_u8GetPinValue(PORTD, PIN2) == 0){
+
+				/* SET REALTIME_u8TemperatureFlag TO ZERO*/
+				REALTIME_u8TemperatureFlag = 0;
+			}
+			else if(DIO_u8GetPinValue(PORTD, PIN2) == 1){
+
+				/* SET REALTIME_u8TemperatureFlag TO ONE*/
+				REALTIME_u8TemperatureFlag = 1;
+
+				/* SET ADC_u8ChannelSelected GLOBAL VARIABLE TO 0 TO GO TO THE TEMPERATURE SENSOR AREA IN THE CALL BACK FUNCTION OF ADC */
+				ADC_u8ChannelSelected = 0;
+
+				// READ CHANNEL0 ASYNCHROUNOUSLY (START CONVERSION)
+				ADC_voidReadChannelASyn(CHANNEL0);
+
+				/* WAIT 20 MILLISECOND */
+				_delay_ms(20);
+			}
+			/*===========================================================================================================*/
+
+			/***************************************** LIGHT SYSTEM UPDATE VALUE *****************************************/
+			if(DIO_u8GetPinValue(PORTD, PIN3) == 0){
+
+				/* SET REALTIME_u8LightSystemFlag TO ZERO*/
+				REALTIME_u8LightSystemFlag = 0;
+			}
+			else if(DIO_u8GetPinValue(PORTD, PIN3) == 1){
+
+				/* SET REALTIME_u8LightSystemFlag TO ONE*/
+				REALTIME_u8LightSystemFlag = 1;
+
+				/* CHECK IF PIR SENSOR DETECT SOMEONE */
+				if(DIO_u8GetPinValue(PORTA, PIN2) == 1){
+
+					/* SET ADC_u8ChannelSelected GLOBAL VARIABLE TO 3 TO GO TO THE LDR AREA IN THE CALL BACK FUNCTION OF ADC */
+					ADC_u8ChannelSelected = 3;
+
+					// READ CHANNEL3 ASYNCHROUNOUSLY (START CONVERSION)
+					ADC_voidReadChannelASyn(CHANNEL3);
+
+					/* WAIT 20 MILLISECOND */
+					_delay_ms(20);
+				}
+
+				/* CHECK IF PIR SENSOR NOT DETECT SOMEONE*/
+				else if(DIO_u8GetPinValue(PORTA, PIN2) == 0){
+
+					LDR_u16DigitalVoltage  	 = 0;
+					LDR_u16OldDigitalVoltage = 0;
+					LDR_u16AnalogVoltagemv 	 = 0;
+
+					/* TURN-OFF LEDS OF LIGHT SYSTEM */
+					DIO_voidSetPinValue(PORTA, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN5, LOW);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+				}
+			}
+			/*===========================================================================================================*/
 		}
 
 		/* WELCOME MESSAGE AREA */
@@ -710,15 +780,15 @@ int main(void){
 				Global_u8Control = 10;
 			}
 
-			/* CHECK IF THE SYSTEM ALREADY RISE END_u8Flag AND PIN2 ON PORTD IS LOW (FALLING EDGE OF THE EXTERNAL INTERRUPT 1) */
+			/* CHECK IF THE SYSTEM ALREADY RISE END_u8Flag AND PIN3 ON PORTD IS LOW (FALLING EDGE OF THE EXTERNAL INTERRUPT 1) */
 			if((END_u8Flag == 1) && (DIO_u8GetPinValue(PORTD, PIN3) == 0)){
 
 				/* BE HERE IN THE LIGHT SYSTEM AREA */
 				Global_u8Control = 7;
 			}
 
-			/* CHECK IF THE SYSTEM ALREADY RISE END_u8Flag AND PIN2 ON PORTD IS HIGH (RISSING EDGE OF THE EXTERNAL INTERRUPT 1) */
-			else if((END_u8Flag == 1) && (DIO_u8GetPinValue(PORTD, PIN2) == 1)){
+			/* CHECK IF THE SYSTEM ALREADY RISE END_u8Flag AND PIN3 ON PORTD IS HIGH (RISSING EDGE OF THE EXTERNAL INTERRUPT 1) */
+			else if((END_u8Flag == 1) && (DIO_u8GetPinValue(PORTD, PIN3) == 1)){
 
 				/* GO TO AREA 10 TO CLEAR FLAGS THEN GO TO RTC AREA SAFELY */
 				Global_u8Control = 10;
@@ -807,165 +877,241 @@ void ADC_FUNC(void){
 			/* CALC THE VALUE OF TEMPERATURE IN DEGREE CELISIUS AND ASSIGN IT TO THE CORRESPONDING GLOBAL VATIABLE */
 			TEMPERATURE_u16Temp = (TEMPERATURE_u16AnalogVoltagemv / 10);
 
-			/* GO TO LINE 0 AT POSITION 13 AND WRITE THE TEMPERATURE VALUE IN CELISIUS */
-			LCD_voidGOTOXY(0, 13);
-			LCD_voidWriteString((u8*)"   ");
-			LCD_voidGOTOXY(0, 13);
-			LCD_voidWriteNumber(TEMPERATURE_u16Temp);
+			/* CHECK IF YOU COME FROM TEMPERATURE SENSOR AREA */
+			if(REALTIME_u8TemperatureFlag == 0){
 
-			/* CHECK IF THE READED TEMPERATURE VALUE IS LESS THAN OR EQUAL 20 */
-			if(TEMPERATURE_u16Temp <= 20){
-				/* CLEAR DIRECTION OF THE FAN ,THUS FAN IS STILL STOPPED */
-				DIO_voidSetPinValue(PORTD, PIN4, LOW);
-				DIO_voidSetPinValue(PORTA, PIN7, LOW);
+				/* GO TO LINE 0 AT POSITION 13 AND WRITE THE TEMPERATURE VALUE IN CELISIUS */
+				LCD_voidGOTOXY(0, 13);
+				LCD_voidWriteString((u8*)"   ");
+				LCD_voidGOTOXY(0, 13);
+				LCD_voidWriteNumber(TEMPERATURE_u16Temp);
 
-				/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (Local_u16Temp <= 20) */
-				if(TEMPERATURE_u8Flag1 == 0){
+				/* CHECK IF THE READED TEMPERATURE VALUE IS LESS THAN OR EQUAL 20 */
+				if(TEMPERATURE_u16Temp <= 20){
+					/* CLEAR DIRECTION OF THE FAN ,THUS FAN IS STILL STOPPED */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, LOW);
 
-					/* TURN-OFF EMERGENCY LED */
-					DIO_voidSetPinValue(PORTD, PIN7, LOW);
+					/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (Local_u16Temp <= 20) */
+					if(TEMPERATURE_u8Flag1 == 0){
 
-					/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN IS OFF" */
-					LCD_voidGOTOXY(1, 0);
-					LCD_voidWriteString((u8*)"                ");
-					LCD_voidGOTOXY(1, 3);
-					LCD_voidWriteString((u8*)"FAN IS OFF");
+						/* TURN-OFF EMERGENCY LED */
+						DIO_voidSetPinValue(PORTD, PIN7, LOW);
 
-					/* SET TEMPERATURE_Flag1 TO PREVENT ENTER THIS IF CONDITION AGAIN UNTILL GO TO OTHER SUPER IF SUCH AS
-					   (Local_u16Temp > 20 && Local_u16Temp <= 25) FIRSTLY.
-				    */
-					TEMPERATURE_u8Flag1 = 1;
+						/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN IS OFF" */
+						LCD_voidGOTOXY(1, 0);
+						LCD_voidWriteString((u8*)"                ");
+						LCD_voidGOTOXY(1, 3);
+						LCD_voidWriteString((u8*)"FAN IS OFF");
 
-					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
-					TEMPERATURE_u8Flag2 = 0;
-					TEMPERATURE_u8Flag3 = 0;
-					TEMPERATURE_u8Flag4 = 0;
-					TEMPERATURE_u8Flag5 = 0;
+						/* SET TEMPERATURE_Flag1 TO PREVENT ENTER THIS IF CONDITION AGAIN UNTILL GO TO OTHER SUPER IF SUCH AS
+						   (Local_u16Temp > 20 && Local_u16Temp <= 25) FIRSTLY.
+					    */
+						TEMPERATURE_u8Flag1 = 1;
+
+						/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
+						TEMPERATURE_u8Flag2 = 0;
+						TEMPERATURE_u8Flag3 = 0;
+						TEMPERATURE_u8Flag4 = 0;
+						TEMPERATURE_u8Flag5 = 0;
+					}
+				}
+
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 21 AND 25 INCLUSIVE */
+				else if(TEMPERATURE_u16Temp > 20 && TEMPERATURE_u16Temp <= 25){
+
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.25 */
+					TIMER0_voidSetOCR0(64);
+
+					/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 20 && ADC_u16Temp <= 25) */
+					if(TEMPERATURE_u8Flag2 == 0){
+
+						/* TURN-OFF EMERGENCY LED */
+						DIO_voidSetPinValue(PORTD, PIN7, LOW);
+
+						/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN SPEED IS 1" */
+						LCD_voidGOTOXY(1, 0);
+						LCD_voidWriteString((u8*)"                ");
+						LCD_voidGOTOXY(1, 1);
+						LCD_voidWriteString((u8*)"FAN SPEED IS 1");
+
+						/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
+						TEMPERATURE_u8Flag1 = 0;
+						TEMPERATURE_u8Flag2 = 1;
+						TEMPERATURE_u8Flag3 = 0;
+						TEMPERATURE_u8Flag4 = 0;
+						TEMPERATURE_u8Flag5 = 0;
+					}
+				}
+
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 26 AND 35 INCLUSIVE */
+				else if(TEMPERATURE_u16Temp > 25 && TEMPERATURE_u16Temp <= 35){
+
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.5 */
+					TIMER0_voidSetOCR0(128);
+
+					/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 25 && ADC_u16Temp <= 35) */
+					if(TEMPERATURE_u8Flag3 == 0){
+
+						/* TURN-OFF EMERGENCY LED */
+						DIO_voidSetPinValue(PORTD, PIN7, LOW);
+
+						/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN SPEED IS 2" */
+						LCD_voidGOTOXY(1, 0);
+						LCD_voidWriteString((u8*)"                ");
+						LCD_voidGOTOXY(1, 1);
+						LCD_voidWriteString((u8*)"FAN SPEED IS 2");
+
+						/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
+						TEMPERATURE_u8Flag1 = 0;
+						TEMPERATURE_u8Flag2 = 0;
+						TEMPERATURE_u8Flag3 = 1;
+						TEMPERATURE_u8Flag4 = 0;
+						TEMPERATURE_u8Flag5 = 0;
+					}
+
+				}
+
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 36 AND 45 INCLUSIVE */
+				else if(TEMPERATURE_u16Temp > 35 && TEMPERATURE_u16Temp <= 45){
+
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.75 */
+					TIMER0_voidSetOCR0(192);
+
+					/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 35 && ADC_u16Temp <= 45) */
+					if(TEMPERATURE_u8Flag4 == 0){
+
+						/* TURN-OFF EMERGENCY LED */
+						DIO_voidSetPinValue(PORTD, PIN7, LOW);
+
+						/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN SPEED IS 3" */
+						LCD_voidGOTOXY(1, 0);
+						LCD_voidWriteString((u8*)"                ");
+						LCD_voidGOTOXY(1, 1);
+						LCD_voidWriteString((u8*)"FAN SPEED IS 3");
+
+						/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
+						TEMPERATURE_u8Flag1 = 0;
+						TEMPERATURE_u8Flag2 = 0;
+						TEMPERATURE_u8Flag3 = 0;
+						TEMPERATURE_u8Flag4 = 1;
+						TEMPERATURE_u8Flag5 = 0;
+					}
+				}
+
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BEGGER THAN 45 */
+				else if(TEMPERATURE_u16Temp > 45){
+
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 1 */
+					TIMER0_voidSetOCR0(255);
+
+					/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 45) */
+					if(TEMPERATURE_u8Flag5 == 0){
+
+						/* TURN-ON EMERGENCY LED TO IDENTICATE THE PRESSENCE OF DANGEROUS DUE TO THE HIGH TEMPERATURE IN THE ATMOSPHERE */
+						DIO_voidSetPinValue(PORTD, PIN7, HIGH);
+
+						/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "EMERGENCY LED ON" */
+						LCD_voidGOTOXY(1, 0);
+						LCD_voidWriteString((u8*)"                ");
+						LCD_voidGOTOXY(1, 0);
+						LCD_voidWriteString((u8*)"EMERGENCY LED ON");
+
+						/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
+						TEMPERATURE_u8Flag1 = 0;
+						TEMPERATURE_u8Flag2 = 0;
+						TEMPERATURE_u8Flag3 = 0;
+						TEMPERATURE_u8Flag4 = 0;
+						TEMPERATURE_u8Flag5 = 1;
+					}
 				}
 			}
 
-			/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 21 AND 25 INCLUSIVE */
-			else if(TEMPERATURE_u16Temp > 20 && TEMPERATURE_u16Temp <= 25){
+			/* CHECK IF YOU COME FROM REAL-TIME SYSTEM */
+			else if(REALTIME_u8TemperatureFlag == 1){
 
-				/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
-				DIO_voidSetPinValue(PORTD, PIN4, LOW);
-				DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+				/* CHECK IF THE READED TEMPERATURE VALUE IS LESS THAN OR EQUAL 20 */
+				if(TEMPERATURE_u16Temp <= 20){
 
-				/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.25 */
-				TIMER0_voidSetOCR0(64);
+					/* CLEAR DIRECTION OF THE FAN ,THUS FAN IS STILL STOPPED */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, LOW);
 
-				/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 20 && ADC_u16Temp <= 25) */
-				if(TEMPERATURE_u8Flag2 == 0){
-
-					/* TURN-OFF EMERGENCY LED */
-					DIO_voidSetPinValue(PORTD, PIN7, LOW);
-
-					/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN SPEED IS 1" */
-					LCD_voidGOTOXY(1, 0);
-					LCD_voidWriteString((u8*)"                ");
-					LCD_voidGOTOXY(1, 1);
-					LCD_voidWriteString((u8*)"FAN SPEED IS 1");
-
-					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
-					TEMPERATURE_u8Flag1 = 0;
-					TEMPERATURE_u8Flag2 = 1;
-					TEMPERATURE_u8Flag3 = 0;
-					TEMPERATURE_u8Flag4 = 0;
-					TEMPERATURE_u8Flag5 = 0;
-				}
-			}
-
-			/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 26 AND 35 INCLUSIVE */
-			else if(TEMPERATURE_u16Temp > 25 && TEMPERATURE_u16Temp <= 35){
-
-				/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
-				DIO_voidSetPinValue(PORTD, PIN4, LOW);
-				DIO_voidSetPinValue(PORTA, PIN7, HIGH);
-
-				/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.5 */
-				TIMER0_voidSetOCR0(128);
-
-				/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 25 && ADC_u16Temp <= 35) */
-				if(TEMPERATURE_u8Flag3 == 0){
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0 (MOTOR STOPPED) */
+					TIMER0_voidSetOCR0(0);
 
 					/* TURN-OFF EMERGENCY LED */
 					DIO_voidSetPinValue(PORTD, PIN7, LOW);
-
-					/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN SPEED IS 2" */
-					LCD_voidGOTOXY(1, 0);
-					LCD_voidWriteString((u8*)"                ");
-					LCD_voidGOTOXY(1, 1);
-					LCD_voidWriteString((u8*)"FAN SPEED IS 2");
-
-					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
-					TEMPERATURE_u8Flag1 = 0;
-					TEMPERATURE_u8Flag2 = 0;
-					TEMPERATURE_u8Flag3 = 1;
-					TEMPERATURE_u8Flag4 = 0;
-					TEMPERATURE_u8Flag5 = 0;
 				}
 
-			}
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 21 AND 25 INCLUSIVE */
+				else if(TEMPERATURE_u16Temp > 20 && TEMPERATURE_u16Temp <= 25){
 
-			/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 36 AND 45 INCLUSIVE */
-			else if(TEMPERATURE_u16Temp > 35 && TEMPERATURE_u16Temp <= 45){
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
 
-				/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
-				DIO_voidSetPinValue(PORTD, PIN4, LOW);
-				DIO_voidSetPinValue(PORTA, PIN7, HIGH);
-
-				/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.75 */
-				TIMER0_voidSetOCR0(192);
-
-				/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 35 && ADC_u16Temp <= 45) */
-				if(TEMPERATURE_u8Flag4 == 0){
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.25 */
+					TIMER0_voidSetOCR0(64);
 
 					/* TURN-OFF EMERGENCY LED */
 					DIO_voidSetPinValue(PORTD, PIN7, LOW);
-
-					/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "FAN SPEED IS 3" */
-					LCD_voidGOTOXY(1, 0);
-					LCD_voidWriteString((u8*)"                ");
-					LCD_voidGOTOXY(1, 1);
-					LCD_voidWriteString((u8*)"FAN SPEED IS 3");
-
-					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
-					TEMPERATURE_u8Flag1 = 0;
-					TEMPERATURE_u8Flag2 = 0;
-					TEMPERATURE_u8Flag3 = 0;
-					TEMPERATURE_u8Flag4 = 1;
-					TEMPERATURE_u8Flag5 = 0;
 				}
-			}
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 26 AND 35 INCLUSIVE */
+				else if(TEMPERATURE_u16Temp > 25 && TEMPERATURE_u16Temp <= 35){
 
-			/* CHECK IF THE READED TEMPERATURE VALUE IS BEGGER THAN 45 */
-			else if(TEMPERATURE_u16Temp > 45){
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
 
-				/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
-				DIO_voidSetPinValue(PORTD, PIN4, LOW);
-				DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.5 */
+					TIMER0_voidSetOCR0(128);
 
-				/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 1 */
-				TIMER0_voidSetOCR0(255);
+					/* TURN-OFF EMERGENCY LED */
+					DIO_voidSetPinValue(PORTD, PIN7, LOW);
+				}
 
-				/* CHECK ON THE FIRST TIME ENTER THE SUPER IF => (ADC_u16Temp > 45) */
-				if(TEMPERATURE_u8Flag5 == 0){
+				/* CHECK IF THE READED TEMPERATURE VALUE IS BETWEEN 36 AND 45 INCLUSIVE */
+				else if(TEMPERATURE_u16Temp > 35 && TEMPERATURE_u16Temp <= 45){
+
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 0.75 */
+					TIMER0_voidSetOCR0(192);
+
+					/* TURN-OFF EMERGENCY LED */
+					DIO_voidSetPinValue(PORTD, PIN7, LOW);
+				}
+
+				else if(TEMPERATURE_u16Temp > 45){
+
+					/* SET DIRECTION OF THE FAN WITH CLOCK-WISE ,THUS FAN IS TURNED ON */
+					DIO_voidSetPinValue(PORTD, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN7, HIGH);
+
+					/* SET THE SPEED OF DC MOTOR (FAN) DUTY CYCLE = 1 */
+					TIMER0_voidSetOCR0(255);
 
 					/* TURN-ON EMERGENCY LED TO IDENTICATE THE PRESSENCE OF DANGEROUS DUE TO THE HIGH TEMPERATURE IN THE ATMOSPHERE */
 					DIO_voidSetPinValue(PORTD, PIN7, HIGH);
-
-					/* CLEAR LINE TWO OF THE LCD AND WRITE THE STRING "EMERGENCY LED ON" */
-					LCD_voidGOTOXY(1, 0);
-					LCD_voidWriteString((u8*)"                ");
-					LCD_voidGOTOXY(1, 0);
-					LCD_voidWriteString((u8*)"EMERGENCY LED ON");
-
-					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO THEIR IF CONDITION FOR THE FIRST TIME */
-					TEMPERATURE_u8Flag1 = 0;
-					TEMPERATURE_u8Flag2 = 0;
-					TEMPERATURE_u8Flag3 = 0;
-					TEMPERATURE_u8Flag4 = 0;
-					TEMPERATURE_u8Flag5 = 1;
 				}
 			}
 			// ASSIGN NEW READED DIGITAL VALUE TO THE OLD ONE GLOBAL VARIABLE
@@ -985,169 +1131,215 @@ void ADC_FUNC(void){
 			// CALC ANALOG READED VOLTAGE IN MILIVOLT AND ASSIGN IT TO THE CORRESPONDING GLOBAL VARIABLE
 			LDR_u16AnalogVoltagemv = (u16)((((u32)LDR_u16DigitalVoltage*5000UL)/1024UL));
 
-			/* CHECK IF READED DIGITAL VALUE IS LESS THAN OR EQUAL 93 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
-			if(LDR_u16DigitalVoltage <= 93 && LDR_u8Flag1 == 0){
+			/* CHECK IF YOU COME FROM LIGHT SYSTEM AREA */
+			if(REALTIME_u8LightSystemFlag == 0){
 
-				/* TURN-ON SYSTEM LEDS */
-				DIO_voidSetPinValue(PORTA, PIN4, HIGH);
-				DIO_voidSetPinValue(PORTA, PIN5, HIGH);
-				DIO_voidSetPinValue(PORTB, PIN2, HIGH);
+				/* CHECK IF READED DIGITAL VALUE IS LESS THAN OR EQUAL 93 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
+				if(LDR_u16DigitalVoltage <= 93 && LDR_u8Flag1 == 0){
 
-				/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "LOW LIGHT : (value of light) volt = (value of volt)mv" */
-				LCD_voidClearDisplay();
-				LCD_voidGOTOXY(0, 0);
-				LCD_voidWriteString((u8*)"LOW LIGHT : ");
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 1);
-				LCD_voidWriteString((u8*)"volt = ");
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
+					/* TURN-ON SYSTEM LEDS */
+					DIO_voidSetPinValue(PORTA, PIN4, HIGH);
+					DIO_voidSetPinValue(PORTA, PIN5, HIGH);
+					DIO_voidSetPinValue(PORTB, PIN2, HIGH);
 
-				/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
-				   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag1 TO PREVENT REPEATATION
-				*/
-				LDR_u8Flag1 = 1;
-				LDR_u8Flag2 = 0;
-				LDR_u8Flag3 = 0;
-				LDR_u8Flag4 = 0;
+					/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "LOW LIGHT : (value of light) volt = (value of volt)mv" */
+					LCD_voidClearDisplay();
+					LCD_voidGOTOXY(0, 0);
+					LCD_voidWriteString((u8*)"LOW LIGHT : ");
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 1);
+					LCD_voidWriteString((u8*)"volt = ");
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+
+					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
+					   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag1 TO PREVENT REPEATATION
+					*/
+					LDR_u8Flag1 = 1;
+					LDR_u8Flag2 = 0;
+					LDR_u8Flag3 = 0;
+					LDR_u8Flag4 = 0;
+				}
+
+				/* CHECK IF READED DIGITAL VALUE IS LESS THAN OR EQUAL 93 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
+				else if(LDR_u16DigitalVoltage <= 93 && LDR_u8Flag1 == 1){
+
+					/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
+					LCD_voidGOTOXY(0, 12);
+					LCD_voidWriteString((u8*)"     ");
+					LCD_voidGOTOXY(0, 12);
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteString((u8*)"        ");
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+				}
+
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 93 AND LESS THAN OR EQUAL 512 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
+				else if(LDR_u16DigitalVoltage > 93 && LDR_u16DigitalVoltage <= 512 && LDR_u8Flag2 == 0){
+
+					/* TURN-ON 2 LEDS ONLY OF THE SYSTEM */
+					DIO_voidSetPinValue(PORTA, PIN4, HIGH);
+					DIO_voidSetPinValue(PORTA, PIN5, HIGH);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+
+					/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "MEDIUM LIGHT:(value of light)   volt = (value of volt)mv" */
+					LCD_voidClearDisplay();
+					LCD_voidGOTOXY(0, 0);
+					LCD_voidWriteString((u8*)"MEDIUM LIGHT:");
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 1);
+					LCD_voidWriteString((u8*)"volt = ");
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+
+					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
+					   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag2 TO PREVENT REPEATATION
+					*/
+					LDR_u8Flag1 = 0;
+					LDR_u8Flag2 = 1;
+					LDR_u8Flag3 = 0;
+					LDR_u8Flag4 = 0;
+				}
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 93 AND LESS THAN OR EQUAL 512 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
+				else if(LDR_u16DigitalVoltage > 93 && LDR_u16DigitalVoltage <= 512 && LDR_u8Flag2 == 1){
+
+					/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
+					LCD_voidGOTOXY(0, 13);
+					LCD_voidWriteString((u8*)"    ");
+					LCD_voidGOTOXY(0, 13);
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteString((u8*)"        ");
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+				}
+
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 512 AND LESS THAN OR EQUAL 682 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
+				else if(LDR_u16DigitalVoltage > 512 && LDR_u16DigitalVoltage <= 682 && LDR_u8Flag3 == 0){
+
+					/* TURN-ON 1 LED ONLY OF THE SYSTEM */
+					DIO_voidSetPinValue(PORTA, PIN4, HIGH);
+					DIO_voidSetPinValue(PORTA, PIN5, LOW);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+
+					/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "GOOD LIGHT:(value of light)   volt = (value of volt)mv" */
+					LCD_voidClearDisplay();
+					LCD_voidGOTOXY(0, 0);
+					LCD_voidWriteString((u8*)"GOOD LIGHT : ");
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 1);
+					LCD_voidWriteString((u8*)"volt = ");
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+
+					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
+					   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag3 TO PREVENT REPEATATION
+					*/
+					LDR_u8Flag1 = 0;
+					LDR_u8Flag2 = 0;
+					LDR_u8Flag3 = 1;
+					LDR_u8Flag4 = 0;
+				}
+
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 512 AND LESS THAN OR EQUAL 682 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
+				else if(LDR_u16DigitalVoltage > 512 && LDR_u16DigitalVoltage <= 682 && LDR_u8Flag3 == 1){
+
+					/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
+					LCD_voidGOTOXY(0, 13);
+					LCD_voidWriteString((u8*)"    ");
+					LCD_voidGOTOXY(0, 13);
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteString((u8*)"        ");
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+				}
+
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 682 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
+				else if(LDR_u16DigitalVoltage > 682 && LDR_u8Flag4 == 0){
+
+					/* TURN-OFF 3 LEDS */
+					DIO_voidSetPinValue(PORTA, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN5, LOW);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+
+					/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "HIGH LIGHT:(value of light)   volt = (value of volt)mv" */
+					LCD_voidClearDisplay();
+					LCD_voidGOTOXY(0, 0);
+					LCD_voidWriteString((u8*)"HIGH LIGHT:");
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 1);
+					LCD_voidWriteString((u8*)"volt = ");
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+
+					/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
+					   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag4 TO PREVENT REPEATATION
+					*/
+					LDR_u8Flag1 = 0;
+					LDR_u8Flag2 = 0;
+					LDR_u8Flag3 = 0;
+					LDR_u8Flag4 = 1;
+				}
+
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 682 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
+				else if(LDR_u16DigitalVoltage > 682 && LDR_u8Flag4 == 1){
+
+					/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
+					LCD_voidGOTOXY(0, 11);
+					LCD_voidWriteString((u8*)"      ");
+					LCD_voidGOTOXY(0, 11);
+					LCD_voidWriteNumber(LDR_u16DigitalVoltage);
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteString((u8*)"        ");
+					LCD_voidGOTOXY(1, 8);
+					LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
+					LCD_voidWriteString((u8*)"mv");
+				}
 			}
 
-			/* CHECK IF READED DIGITAL VALUE IS LESS THAN OR EQUAL 93 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
-			else if(LDR_u16DigitalVoltage <= 93 && LDR_u8Flag1 == 1){
+			/* CHECK IF YOU COME FROM THE REAL TIME SYSTEM */
+			else if(REALTIME_u8LightSystemFlag == 1){
 
-				/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
-				LCD_voidGOTOXY(0, 12);
-				LCD_voidWriteString((u8*)"     ");
-				LCD_voidGOTOXY(0, 12);
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteString((u8*)"        ");
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
-			}
+				/* CHECK IF READED DIGITAL VALUE IS LESS THAN OR EQUAL 93 OR NOT */
+				if(LDR_u16DigitalVoltage <= 93){
 
-			/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 93 AND LESS THAN OR EQUAL 512 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
-			else if(LDR_u16DigitalVoltage > 93 && LDR_u16DigitalVoltage <= 512 && LDR_u8Flag2 == 0){
+					/* TURN-ON SYSTEM LEDS */
+					DIO_voidSetPinValue(PORTA, PIN4, HIGH);
+					DIO_voidSetPinValue(PORTA, PIN5, HIGH);
+					DIO_voidSetPinValue(PORTB, PIN2, HIGH);
+				}
 
-				/* TURN-ON 2 LEDS ONLY OF THE SYSTEM */
-				DIO_voidSetPinValue(PORTA, PIN4, HIGH);
-				DIO_voidSetPinValue(PORTA, PIN5, HIGH);
-				DIO_voidSetPinValue(PORTB, PIN2, LOW);
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 93 AND LESS THAN OR EQUAL 512 OR NOT */
+				else if(LDR_u16DigitalVoltage > 93 && LDR_u16DigitalVoltage <= 512){
 
-				/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "MEDIUM LIGHT:(value of light)   volt = (value of volt)mv" */
-				LCD_voidClearDisplay();
-				LCD_voidGOTOXY(0, 0);
-				LCD_voidWriteString((u8*)"MEDIUM LIGHT:");
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 1);
-				LCD_voidWriteString((u8*)"volt = ");
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
+					/* TURN-ON 2 LEDS ONLY OF THE SYSTEM */
+					DIO_voidSetPinValue(PORTA, PIN4, HIGH);
+					DIO_voidSetPinValue(PORTA, PIN5, HIGH);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+				}
 
-				/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
-				   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag2 TO PREVENT REPEATATION
-				*/
-				LDR_u8Flag1 = 0;
-				LDR_u8Flag2 = 1;
-				LDR_u8Flag3 = 0;
-				LDR_u8Flag4 = 0;
-			}
-			/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 93 AND LESS THAN OR EQUAL 512 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
-			else if(LDR_u16DigitalVoltage > 93 && LDR_u16DigitalVoltage <= 512 && LDR_u8Flag2 == 1){
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 512 AND LESS THAN OR EQUAL 682 OR NOT */
+				else if(LDR_u16DigitalVoltage > 512 && LDR_u16DigitalVoltage <= 682){
 
-				/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
-				LCD_voidGOTOXY(0, 13);
-				LCD_voidWriteString((u8*)"    ");
-				LCD_voidGOTOXY(0, 13);
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteString((u8*)"        ");
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
-			}
+					/* TURN-ON 1 LED ONLY OF THE SYSTEM */
+					DIO_voidSetPinValue(PORTA, PIN4, HIGH);
+					DIO_voidSetPinValue(PORTA, PIN5, LOW);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+				}
 
-			/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 512 AND LESS THAN OR EQUAL 682 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
-			else if(LDR_u16DigitalVoltage > 512 && LDR_u16DigitalVoltage <= 682 && LDR_u8Flag3 == 0){
+				/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 682 OR NOT */
+				else if(LDR_u16DigitalVoltage > 682){
 
-				/* TURN-ON 1 LED ONLY OF THE SYSTEM */
-				DIO_voidSetPinValue(PORTA, PIN4, HIGH);
-				DIO_voidSetPinValue(PORTA, PIN5, LOW);
-				DIO_voidSetPinValue(PORTB, PIN2, LOW);
-
-				/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "GOOD LIGHT:(value of light)   volt = (value of volt)mv" */
-				LCD_voidClearDisplay();
-				LCD_voidGOTOXY(0, 0);
-				LCD_voidWriteString((u8*)"GOOD LIGHT : ");
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 1);
-				LCD_voidWriteString((u8*)"volt = ");
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
-
-				/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
-				   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag3 TO PREVENT REPEATATION
-				*/
-				LDR_u8Flag1 = 0;
-				LDR_u8Flag2 = 0;
-				LDR_u8Flag3 = 1;
-				LDR_u8Flag4 = 0;
-			}
-
-			/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 512 AND LESS THAN OR EQUAL 682 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
-			else if(LDR_u16DigitalVoltage > 512 && LDR_u16DigitalVoltage <= 682 && LDR_u8Flag3 == 1){
-
-				/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
-				LCD_voidGOTOXY(0, 13);
-				LCD_voidWriteString((u8*)"    ");
-				LCD_voidGOTOXY(0, 13);
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteString((u8*)"        ");
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
-			}
-
-			/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 682 OR NOT AND IF THIS CONDITION TAKE PLACE FOR THE FIRST TIME OR NOT */
-			else if(LDR_u16DigitalVoltage > 682 && LDR_u8Flag4 == 0){
-				DIO_voidSetPinValue(PORTA, PIN4, LOW);
-				DIO_voidSetPinValue(PORTA, PIN5, LOW);
-				DIO_voidSetPinValue(PORTB, PIN2, LOW);
-
-				/* CLEAR THE DISPLAY ,THEN WRITE THE STRING "HIGH LIGHT:(value of light)   volt = (value of volt)mv" */
-				LCD_voidClearDisplay();
-				LCD_voidGOTOXY(0, 0);
-				LCD_voidWriteString((u8*)"HIGH LIGHT:");
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 1);
-				LCD_voidWriteString((u8*)"volt = ");
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
-
-				/* CLEAR THE OTHER FLAGS TO ALLOW WRITEING THE SPECIFIED STRING WHEN GO TO
-				   THEIR IF CONDITION FOR THE FIRST TIME AND SET LDR_u8Flag4 TO PREVENT REPEATATION
-				*/
-				LDR_u8Flag1 = 0;
-				LDR_u8Flag2 = 0;
-				LDR_u8Flag3 = 0;
-				LDR_u8Flag4 = 1;
-			}
-
-			/* CHECK IF READED DIGITAL VALUE IS BIGGER THAN 682 OR NOT AND IF THIS CONDITION TAKE PLACE BEFORE OR NOT */
-			else if(LDR_u16DigitalVoltage > 682 && LDR_u8Flag4 == 1){
-
-				/* UPDATES VALUES OF (LIGHT AND VOLT) ONLY */
-				LCD_voidGOTOXY(0, 11);
-				LCD_voidWriteString((u8*)"      ");
-				LCD_voidGOTOXY(0, 11);
-				LCD_voidWriteNumber(LDR_u16DigitalVoltage);
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteString((u8*)"        ");
-				LCD_voidGOTOXY(1, 8);
-				LCD_voidWriteNumber(LDR_u16AnalogVoltagemv);
-				LCD_voidWriteString((u8*)"mv");
+					/* TURN-OFF 3 LEDS */
+					DIO_voidSetPinValue(PORTA, PIN4, LOW);
+					DIO_voidSetPinValue(PORTA, PIN5, LOW);
+					DIO_voidSetPinValue(PORTB, PIN2, LOW);
+				}
 			}
 
 			// ASSIGN NEW READED DIGITAL VALUE TO THE OLD ONE GLOBAL VARIABLE
